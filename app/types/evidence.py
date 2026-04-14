@@ -32,4 +32,5 @@ EvidenceSource = Literal[
     "gitlab",
     "bitbucket",
     "mysql",
+    "alertmanager",
 ]

@@ -18,6 +18,7 @@ from app.integrations.github_mcp import build_github_mcp_config
 from app.integrations.gitlab import DEFAULT_GITLAB_BASE_URL, build_gitlab_config
 from app.integrations.mariadb import build_mariadb_config
 from app.integrations.models import (
+    AlertmanagerIntegrationConfig,
     AWSIntegrationConfig,
     CoralogixIntegrationConfig,
     DatadogIntegrationConfig,
@@ -67,6 +68,7 @@ _SERVICE_KEY_MAP = {
     "opsgenie": "opsgenie",
     "discord": "discord",
     "mysql": "mysql",
+    "alertmanager": "alertmanager",
 }
 
 
@@ -386,6 +388,22 @@ def _classify_integrations(
                     "ssl_mode": mysql_config.ssl_mode,
                     "integration_id": integration.get("id", ""),
                 }
+
+        elif key == "alertmanager":
+            try:
+                alertmanager_config = AlertmanagerIntegrationConfig.model_validate(
+                    {
+                        "base_url": credentials.get("base_url", ""),
+                        "bearer_token": credentials.get("bearer_token", ""),
+                        "username": credentials.get("username", ""),
+                        "password": credentials.get("password", ""),
+                        "integration_id": integration.get("id", ""),
+                    }
+                )
+            except Exception:
+                continue
+            if alertmanager_config.base_url:
+                resolved["alertmanager"] = alertmanager_config.model_dump()
 
         else:
             resolved[key] = {
@@ -773,6 +791,28 @@ def _load_env_integrations() -> list[dict[str, Any]]:
                 "credentials": mysql_config.model_dump(exclude={"integration_id"}),
             }
         )
+
+    alertmanager_url = os.getenv("ALERTMANAGER_URL", "").strip().rstrip("/")
+    if alertmanager_url:
+        try:
+            alertmanager_config = AlertmanagerIntegrationConfig.model_validate(
+                {
+                    "base_url": alertmanager_url,
+                    "bearer_token": os.getenv("ALERTMANAGER_BEARER_TOKEN", "").strip(),
+                    "username": os.getenv("ALERTMANAGER_USERNAME", "").strip(),
+                    "password": os.getenv("ALERTMANAGER_PASSWORD", "").strip(),
+                }
+            )
+            integrations.append(
+                {
+                    "id": "env-alertmanager",
+                    "service": "alertmanager",
+                    "status": "active",
+                    "credentials": alertmanager_config.model_dump(exclude={"integration_id"}),
+                }
+            )
+        except Exception:
+            logger.debug("Failed to load Alertmanager config from env", exc_info=True)
 
     return integrations
 
